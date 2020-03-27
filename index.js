@@ -60,11 +60,11 @@ const addUrl = (request, response) => {
 };
 
 const addUrlStatistics = (request, response) => {
-  const { urlid } = request.body;
+  const { urlid, ipaddress } = request.body;
   console.log(request.body);
   pool.query(
-    "INSERT INTO urlstatistics (urlsid, accesseddate) VALUES ($1, current_timestamp)",
-    [urlid],
+    "INSERT INTO urlstatistics (urlsid,ipaddress, accesseddate) VALUES ($1, $2, current_timestamp)",
+    [urlid, ipaddress],
     error => {
       if (error) {
         throw error;
@@ -109,7 +109,8 @@ const getUrlStatistics = (request, response) => {
               "SELECT * FROM urlstatistics where to_char(accesseddate, 'YYYY-MM-DD') = '" +
               analysis[0].analysis[i].thedate +
               "' and urlsid=" +
-              urlid;
+              urlid +
+              " order by accesseddate desc";
             getResult(innersql, i)
               .then(innerrows => {
                 analysis[0].analysis[innerrows.cnt].rows = innerrows.rows;
@@ -121,6 +122,69 @@ const getUrlStatistics = (request, response) => {
                 // handle errors
               });
           }
+          if (analysis[0].analysis.length === 0)
+            response.status(200).json(analysis);
+        })
+        .catch(err => {
+          // handle errors
+        });
+    })
+    .catch(err => {
+      // handle errors
+    });
+};
+
+const getSettings = (request, response) => {
+  //pool.connect();
+  pool.query("SELECT * FROM urlsettings", (error, results) => {
+    if (error) {
+      throw error;
+    }
+    response.status(200).json(results.rows);
+  });
+};
+
+const editSetting = (request, response) => {
+  const { ratelimit } = request.body;
+  console.log(request.body);
+  pool.query("update urlsettings set ratelimit = $1", [ratelimit], error => {
+    if (error) {
+      throw error;
+    }
+    //response.status(500).json({ status: "success", message: "Book added." });
+    response
+      .status(201)
+      .json({ status: "success", message: "Settings Updated." });
+  });
+};
+
+const checkRateLimit = (request, response) => {
+  //pool.connect();
+  const { urlid, ipaddress } = request.body;
+  var settings = [];
+  let urlsql = "SELECT * from urlsettings";
+  var ratelimit = 0;
+
+  getResult(urlsql, 0)
+    .then(urlrows => {
+      settings = urlrows.rows;
+      ratelimit = settings[0].ratelimit;
+      console.log(ratelimit);
+      let sql =
+        "SELECT  * FROM urlstatistics where urlsid=" +
+        urlid +
+        " and ipaddress='" +
+        ipaddress +
+        "' and to_char(accesseddate, 'YYYY-MM-DD') = to_char(now(), 'YYYY-MM-DD')";
+      //console.log(sql);
+      getResult(sql, 0)
+        .then(rows => {
+          let nofvisits = rows.rows;
+          console.log(nofvisits.length);
+
+          if (nofvisits.length >= ratelimit)
+            response.status(200).json({ exceeded: true });
+          else response.status(200).json({ exceeded: false });
         })
         .catch(err => {
           // handle errors
@@ -149,6 +213,18 @@ app
   .post(addUrlStatistics);
 
 app.route("/urlstatistic/:urlid").get(getUrlStatistics);
+
+app
+  .route("/settings")
+  // GET endpoint
+  .get(getSettings)
+  // POST endpoint
+  .post(editSetting);
+
+app
+  .route("/checkratelimit")
+  // GET endpoint
+  .post(checkRateLimit);
 
 // Start server
 app.listen(process.env.PORT || 3002, () => {
