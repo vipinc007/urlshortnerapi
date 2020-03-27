@@ -90,31 +90,41 @@ const getUrlStatistics = (request, response) => {
   //pool.connect();
   let urlid = request.params.urlid;
   var analysis = [];
-  let sql =
-    "SELECT count(*) as access_count,to_char(accesseddate, 'YYYY-MM-DD') as thedate FROM urlstatistics where urlsid=" +
-    urlid +
-    " group by thedate";
+  let urlsql = "SELECT * from urls where id=" + urlid;
 
-  getResult(sql, 0)
-    .then(rows => {
-      analysis = rows.rows;
+  getResult(urlsql, 0)
+    .then(urlrows => {
+      analysis = urlrows.rows;
 
-      for (var i = 0; i < analysis.length; i++) {
-        let innersql =
-          "SELECT * FROM urlstatistics where to_char(accesseddate, 'YYYY-MM-DD') = '" +
-          analysis[i].thedate +
-          "'";
-        getResult(innersql, i)
-          .then(innerrows => {
-            analysis[innerrows.cnt].rows = innerrows.rows;
+      let sql =
+        "SELECT count(*) as access_count,to_char(accesseddate, 'YYYY-MM-DD') as thedate FROM urlstatistics where urlsid=" +
+        urlid +
+        " group by thedate";
+      getResult(sql, 0)
+        .then(rows => {
+          analysis[0].analysis = rows.rows;
 
-            if (innerrows.cnt === analysis.length - 1)
-              response.status(200).json(analysis);
-          })
-          .catch(err => {
-            // handle errors
-          });
-      }
+          for (var i = 0; i < analysis[0].analysis.length; i++) {
+            let innersql =
+              "SELECT * FROM urlstatistics where to_char(accesseddate, 'YYYY-MM-DD') = '" +
+              analysis[0].analysis[i].thedate +
+              "' and urlsid=" +
+              urlid;
+            getResult(innersql, i)
+              .then(innerrows => {
+                analysis[0].analysis[innerrows.cnt].rows = innerrows.rows;
+
+                if (innerrows.cnt === analysis[0].analysis.length - 1)
+                  response.status(200).json(analysis);
+              })
+              .catch(err => {
+                // handle errors
+              });
+          }
+        })
+        .catch(err => {
+          // handle errors
+        });
     })
     .catch(err => {
       // handle errors
